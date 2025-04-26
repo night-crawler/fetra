@@ -6,6 +6,7 @@ edition = "2021"
 license.workspace = true
 
 [dependencies]
+bytemuck.workspace = true
 fetra-common = { path = "../fetra-common", features = ["user"] }
 
 anyhow = { workspace = true, default-features = true }

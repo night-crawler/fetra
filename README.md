@@ -1,5 +1,10 @@
 # fetra
 
+```bash
+sudo bpftool btf dump file /sys/kernel/btf/vmlinux format c > fetra-bindings/vmlinux.h
+```
+
+
 ## Prerequisites
 
 1. stable rust toolchains: `rustup toolchain install stable`

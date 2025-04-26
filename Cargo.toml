@@ -28,6 +28,10 @@ log = { version = "0.4.22", default-features = false }
 tokio = { version = "1.40.0", default-features = false }
 which = { version = "6.0.0", default-features = false }
 
+bytemuck = { version = "1.22.0", features = ["derive"]}
+
+bindgen = {version = "0.71.1", features = ["default"]}
+
 [profile.release.package.fetra-ebpf]
 debug = 2
 codegen-units = 1

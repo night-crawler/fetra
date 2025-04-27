@@ -1,22 +1,46 @@
+mod process;
+
+use crate::process::ext::EventExt;
 use anyhow::Context as _;
 use aya::maps::RingBuf;
 use aya::{programs::FEntry, Btf, EbpfLoader};
-use fetra_common::Event;
-#[rustfmt::skip]
+use fetra_common::FileAccessEvent;
 use log::{debug, warn};
+use std::fmt::Display;
+use std::fs;
+
+fn get_ppid(pid: impl Display) -> anyhow::Result<u32> {
+    Ok(fs::read_to_string(format!("/proc/{}/stat", pid))?
+        .split_whitespace()
+        .nth(3)
+        .context("Failed to get ppid")?
+        .parse::<u32>()?)
+}
+
+fn get_ppid_path() -> anyhow::Result<[u32; 8]> {
+    let pid = unsafe { libc::getpid() } as u32;
+    let mut parent_pid = unsafe { libc::getppid() } as u32;
+    let mut pids = [0u32; 8];
+    pids[0] = pid;
+    pids[1] = parent_pid;
+
+    for pid in pids.iter_mut().skip(2) {
+        parent_pid = get_ppid(parent_pid)?;
+        if parent_pid == 0 {
+            break;
+        }
+        *pid = parent_pid;
+    }
+
+    Ok(pids)
+}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     env_logger::init();
 
-    let pid = unsafe {
-        libc::getpid()
-    } as u32;
-
-    let parent_pid = unsafe {
-        libc::getppid()
-    } as u32;
-
+    let ppid_path = get_ppid_path()?;
+    println!("{:?}", ppid_path);
 
     let rlim = libc::rlimit {
         rlim_cur: libc::RLIM_INFINITY,
@@ -31,7 +55,7 @@ async fn main() -> anyhow::Result<()> {
     let btf = Btf::from_sys_fs().ok();
     loader
         .btf(btf.as_ref())
-        .set_global("FILTER_TGID", &parent_pid, true);
+        .set_global("FILTER_TGIDS", &ppid_path, true);
 
     let mut ebpf = loader.load(aya::include_bytes_aligned!(concat!(
         env!("OUT_DIR"),
@@ -51,16 +75,13 @@ async fn main() -> anyhow::Result<()> {
 
     loop {
         while let Some(item) = ring_buf.next() {
-            let e = bytemuck::from_bytes::<Event>(&item);
-            if e.pid == pid as u32 || e.pid == parent_pid as u32 {
-                continue;
+            let event = bytemuck::from_bytes::<FileAccessEvent>(&item);
+            match event.process() {
+                Ok(_) => {}
+                Err(err) => {
+                    warn!("Failed to read event: {err}");
+                }
             }
-            let p = format!("/proc/{}/fd/{}",e.tgid, e.inode);
-            println!("{p}, ppid={parent_pid}, pid={pid}");
-            // let path = std::fs::read_link(&p)
-            //     .unwrap_or_else(|_| "<unknown>".into());
-            // println!("{path:?}, {e:?}");
-            // println!("Received: {:?}", e);
         }
     }
 }

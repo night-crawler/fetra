@@ -22,6 +22,9 @@ tokio = { workspace = true, features = [
     "net",
     "signal",
 ] }
+thiserror.workspace = true
+nix.workspace = true
+
 [build-dependencies]
 anyhow = { workspace = true }
 aya-build = { workspace = true }
@@ -38,6 +41,7 @@ aya-build = { workspace = true }
 # workflows with stable cargo; stable cargo outright refuses to load manifests that use unstable
 # features.
 fetra-ebpf = { path = "../fetra-ebpf" }
+
 
 [[bin]]
 name = "fetra"

@@ -1,3 +1,13 @@
+#![allow(static_mut_refs)]
+#![allow(
+    non_upper_case_globals,
+    non_camel_case_types,
+    non_snake_case,
+    dead_code,
+    improper_ctypes,
+    clippy::all,
+)]
+
 #![no_std]
 #![no_main]
 
@@ -7,12 +17,15 @@
     non_snake_case,
     dead_code,
     improper_ctypes,
-    clippy::all
+    clippy::all,
 )]
-mod bindings;
+pub mod bindings;
+
+pub mod ext;
+mod d_path;
+mod helpers;
 
 use crate::bindings::{file, super_block};
-use aya_ebpf::helpers::bpf_probe_read_kernel;
 use aya_ebpf::macros::fentry;
 use aya_ebpf::programs::FEntryContext;
 use aya_ebpf::{
@@ -21,7 +34,9 @@ use aya_ebpf::{
     maps::RingBuf,
 };
 use bytemuck::Zeroable;
+use core::ptr::copy_nonoverlapping;
 use fetra_common::FileAccessEvent;
+use crate::d_path::d_path_local;
 
 #[no_mangle]
 static mut FILTER_TGIDS: [u32; 8] = [0; 8];
@@ -40,12 +55,6 @@ pub fn handle_write(ctx: FEntryContext) -> i64 {
     }
 }
 
-macro_rules! p {
-    ($base:expr, $($field:tt).+) => {{
-        unsafe { (*$base)$(.$field)+ }
-    }};
-}
-
 unsafe fn try_handle_write(ctx: &FEntryContext) -> Result<(), i64> {
     let file: *const file = ctx.arg(0);
     let count: usize = ctx.arg(2);
@@ -58,7 +67,7 @@ unsafe fn try_handle_write(ctx: &FEntryContext) -> Result<(), i64> {
     if FILTER_TGIDS.contains(&tgid) {
         return Ok(());
     }
-    
+
     let mut event = FileAccessEvent::zeroed();
 
     event.tid = tid;
@@ -67,19 +76,18 @@ unsafe fn try_handle_write(ctx: &FEntryContext) -> Result<(), i64> {
     event.bytes = count as i64;
 
     let inode_ptr = (*file).f_inode;
-    let sb_ptr: *const super_block = bpf_probe_read_kernel(&(*inode_ptr).i_sb)?;
-    // let sb_ptr: *const super_block = p!(inode_ptr, i_sb);
-    let dev = bpf_probe_read_kernel(&(*sb_ptr).s_dev)?;
+    let sb_ptr: *const super_block = (*inode_ptr). i_sb;
+    let dev = (*sb_ptr).s_dev;
 
     event.dev = dev;
     event.inode = (*inode_ptr).i_ino;
+    event.s_magic = (*sb_ptr).s_magic;
+    event.i_mode = (*inode_ptr).i_mode;
 
-    // helper call is not allowed in probe
-    // bpf_d_path(
-    //     &(*file).f_path as *const _ as *mut path,
-    //     event.path.as_mut_ptr() as *mut c_char,
-    //     event.path.len() as u32,
-    // );
+    let path = (*file).f_path;
+
+    let (buf, len) = d_path_local(ctx, path)?;
+    copy_nonoverlapping(buf, &mut event.d_name as *mut _, len.min(256));
 
     EVENTS.output(&event, 0)?;
 

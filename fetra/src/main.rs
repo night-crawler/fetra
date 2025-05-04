@@ -72,7 +72,7 @@ async fn main() -> anyhow::Result<()> {
     program.attach()?;
 
     let mut ring_buf = RingBuf::try_from(ebpf.map_mut("EVENTS").unwrap())?;
-
+    
     loop {
         while let Some(item) = ring_buf.next() {
             let event = bytemuck::from_bytes::<FileAccessEvent>(&item);

@@ -1,4 +1,4 @@
-use crate::bindings::{dentry, file, qstr, super_block};
+use crate::bindings::qstr;
 
 pub trait QstrExt {
     fn len(&self) -> u32;

@@ -1,47 +1,40 @@
-use fetra_common::FileAccessEvent;
-use log::warn;
-use std::ffi::{c_char, CStr};
-use std::os::unix::fs::MetadataExt; // Not used in this snippet, but might be elsewhere
+//! Utilities to pretty‑print `FileAccessEvent`s in an `ls -lah`‑inspired style
+//! keeping special files (sockets, pipes, char/block devices …) readable and
+//! showing resolved device names when possible.
 
-// Import necessary constants from libc
 use linux_raw_sys::general::{
-    ANON_INODE_FS_MAGIC,
-     BPF_FS_MAGIC, CGROUP2_SUPER_MAGIC, DEBUGFS_MAGIC, 
-    // DEVPTS_FS_MAGIC,
-    EFIVARFS_MAGIC, HUGETLBFS_MAGIC, 
-    // MQUEUE_MAGIC,
-    NSFS_MAGIC, OVERLAYFS_SUPER_MAGIC,
-    PIPEFS_MAGIC, PROC_SUPER_MAGIC, RAMFS_MAGIC, SECURITYFS_MAGIC, SELINUX_MAGIC, SMACK_MAGIC,
-    SOCKFS_MAGIC, SYSFS_MAGIC, TMPFS_MAGIC, TRACEFS_MAGIC,
-    // VFAT_SUPER_MAGIC,
-    BTRFS_SUPER_MAGIC, // Add more as needed
-    // File type constants from i_mode (combine with S_IFMT)
-    S_IFMT, S_IFSOCK, S_IFLNK, S_IFREG, S_IFBLK, S_IFDIR, S_IFCHR, S_IFIFO,
+    ANON_INODE_FS_MAGIC, BPF_FS_MAGIC, BTRFS_SUPER_MAGIC, CGROUP2_SUPER_MAGIC, DEBUGFS_MAGIC,
+    DEVPTS_SUPER_MAGIC, HUGETLBFS_MAGIC, NSFS_MAGIC, OVERLAYFS_SUPER_MAGIC, PIPEFS_MAGIC,
+    PROC_SUPER_MAGIC, RAMFS_MAGIC, SECURITYFS_MAGIC, SELINUX_MAGIC, SMACK_MAGIC, SOCKFS_MAGIC,
+    SYSFS_MAGIC, S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK,
+    TMPFS_MAGIC, TRACEFS_MAGIC,
 };
+use std::ffi::{c_char, CStr};
+use std::fs;
 
+use fetra_common::FileAccessEvent;
+use libc::{major, minor};
 
 fn get_inode_type_desc(magic: u64, mode: u16) -> String {
-    let magic_desc = match magic as u32 { 
-        ANON_INODE_FS_MAGIC => "anon_inode", 
+    let magic_desc = match magic as u32 {
+        ANON_INODE_FS_MAGIC => "anon_inode",
         PIPEFS_MAGIC => "pipe",
         SOCKFS_MAGIC => "socket",
         TMPFS_MAGIC => "tmpfs",
-        DEVPTS_FS_MAGIC => "devpts",
-        PROC_SUPER_MAGIC => "procfs",
+        DEVPTS_SUPER_MAGIC => "devpts",
+        PROC_SUPER_MAGIC => "proc",
         SYSFS_MAGIC => "sysfs",
         DEBUGFS_MAGIC => "debugfs",
         SECURITYFS_MAGIC => "securityfs",
-        CGROUP2_SUPER_MAGIC => "cgroup2fs",
-        BPF_FS_MAGIC => "bpf_fs",
+        CGROUP2_SUPER_MAGIC => "cgroup2",
+        BPF_FS_MAGIC => "bpf",
         HUGETLBFS_MAGIC => "hugetlbfs",
-        MQUEUE_MAGIC => "mqueue",
-        NSFS_MAGIC => "nsfs",
-        OVERLAYFS_SUPER_MAGIC => "overlayfs",
+        NSFS_MAGIC => "ns",
+        OVERLAYFS_SUPER_MAGIC => "overlay",
         RAMFS_MAGIC => "ramfs",
-        SELINUX_MAGIC => "selinuxfs",
-        SMACK_MAGIC => "smackfs",
+        SELINUX_MAGIC => "selinux",
+        SMACK_MAGIC => "smack",
         TRACEFS_MAGIC => "tracefs",
-        VFAT_SUPER_MAGIC => "vfat",
         BTRFS_SUPER_MAGIC => "btrfs",
         _ => "",
     };
@@ -52,72 +45,135 @@ fn get_inode_type_desc(magic: u64, mode: u16) -> String {
 
     let file_type = (mode as u32) & S_IFMT;
     let mode_desc = match file_type {
-        S_IFIFO => "fifo", 
+        S_IFIFO => "fifo",
         S_IFCHR => "char_dev",
-        S_IFDIR => "dir", 
+        S_IFDIR => "dir",
         S_IFBLK => "block_dev",
         S_IFREG => {
             if magic == ANON_INODE_FS_MAGIC as u64 {
-                "anon_inode_file" // e.g., eventfd, signalfd, sync_file
+                "anon_inode_file"
             } else {
-                "regular_file" // If magic was unknown
+                "regular_file"
             }
         }
         S_IFLNK => "symlink",
-        S_IFSOCK => "socket", // Should usually be caught by SOCKFS_MAGIC
+        S_IFSOCK => "socket",
         _ => "",
     };
 
     if !mode_desc.is_empty() {
-        if magic == ANON_INODE_FS_MAGIC as u64 && mode_desc != "socket" { 
-            format!("anon_inode:[{}]", mode_desc)
+        if magic == ANON_INODE_FS_MAGIC as u64 && mode_desc != "socket" {
+            format!("anon_inode:[{mode_desc}]")
         } else {
             mode_desc.to_string()
         }
     } else if magic == ANON_INODE_FS_MAGIC as u64 {
-        "anon_inode:[unknown_type]".to_string()
-    }
-    else {
-        format!("magic:0x{:x}", magic)
+        "anon_inode:[unknown]".to_string()
+    } else {
+        format!("magic:0x{magic:x}")
     }
 }
 
+fn mode_to_string(mode: u16) -> String {
+    let mut out = String::with_capacity(10);
+
+    // first char – file‑type indicator
+    let typ = match (mode as u32) & S_IFMT {
+        S_IFSOCK => 's',
+        S_IFLNK => 'l',
+        S_IFREG => '-',
+        S_IFBLK => 'b',
+        S_IFDIR => 'd',
+        S_IFCHR => 'c',
+        S_IFIFO => 'p',
+        _ => '?',
+    };
+    out.push(typ);
+
+    // nine permission bits
+    for shift in (0..9).rev().step_by(3) {
+        let r = 1 << (shift + 2);
+        let w = 1 << (shift + 1);
+        let x = 1 << shift;
+
+        out.push(if (mode & r) != 0 { 'r' } else { '-' });
+        out.push(if (mode & w) != 0 { 'w' } else { '-' });
+        out.push(if (mode & x) != 0 { 'x' } else { '-' });
+    }
+    out
+}
+
+/// Human‑friendly (IEC) byte sizes, used for regular files.
+fn human_size(bytes: i64) -> String {
+    if bytes < 0 {
+        return "-".to_string();
+    }
+    const UNITS: [&str; 7] = ["B", "K", "M", "G", "T", "P", "E"];
+    let mut val = bytes as f64;
+    let mut idx = 0usize;
+    while val >= 1024.0 && idx < UNITS.len() - 1 {
+        val /= 1024.0;
+        idx += 1;
+    }
+    if idx == 0 {
+        format!("{val:.0}{}", UNITS[idx])
+    } else {
+        format!("{val:.1}{}", UNITS[idx])
+    }
+}
+
+/// Extract major/minor numbers from the raw `dev` field.
+fn major_minor(dev: u32) -> (u32, u32) {
+    let d = dev as libc::dev_t;
+    (major(d), minor(d))
+}
+
+/// Best‑effort translation of a `(major,minor)` pair into a `/dev/<node>` name.
+fn dev_name_from_dev(dev: u32) -> Option<String> {
+    let (maj, min) = major_minor(dev);
+    let path = format!("/sys/dev/block/{maj}:{min}/uevent");
+    if let Ok(content) = fs::read_to_string(&path) {
+        for line in content.lines() {
+            if let Some(name) = line.strip_prefix("DEVNAME=") {
+                return Some(name.to_string());
+            }
+        }
+    }
+    None
+}
 
 pub trait EventExt {
-    fn process(&self) -> Result<(), String>;
+    fn process(self) -> Result<(), String>;
 }
 
 impl EventExt for FileAccessEvent {
-    fn process(&self) -> Result<(), String> {
-        // Safely get comm string
-        let comm_cstr = unsafe { CStr::from_ptr(self.comm.as_ptr() as *const c_char) };
-        let comm = comm_cstr.to_string_lossy();
-        
-        let d_name = unsafe { CStr::from_ptr(self.d_name.as_ptr() as *const c_char) };
-        let d_name = d_name.to_string_lossy();
-        let name_len = d_name.len();
-        
-        if d_name.starts_with("/dev") {
-            println!("{d_name} {:?}", self.d_name);
-        }
+    fn process(self) -> Result<(), String> {
+        let comm = unsafe { CStr::from_ptr(self.comm.as_ptr() as *const c_char) };
+        let comm = comm.to_string_lossy();
+        let path = unsafe { CStr::from_ptr(self.path.as_ptr() as *const c_char) };
+        let path = path.to_string_lossy();
 
-         let target_desc= if name_len > 0 {
-            String::from_utf8_lossy(&self.d_name[0..name_len]).to_string()
-        } else {
-            get_inode_type_desc(self.s_magic, self.i_mode)
+        let perms = mode_to_string(self.i_mode);
+        let inode_desc = get_inode_type_desc(self.s_magic, self.i_mode);
+
+        let (maj, min) = major_minor(self.dev);
+        let dev_display = dev_name_from_dev(self.dev).unwrap_or_else(|| format!("{maj},{min}"));
+
+        let size_field = match perms.chars().next() {
+            Some('c') | Some('b') => format!("{maj},{min}"),
+            Some('s') | Some('p') => "-".to_string(),
+            _ => human_size(self.bytes),
         };
 
-        let fd_placeholder = format!("inode:{}", self.inode);
-
-
-        // println!(
-        //     "tgid={} dev={} {} -> {}; target={}",
-        //     self.tgid,
-        //     self.dev, 
-        //     fd_placeholder, 
-        //     comm,
-        //     target_desc,
-        // );
+        println!(
+            "{perms} {tgid:<10}:{tid:<10} {comm:<16} {size:<8} {dev:<10} {inode:<18} {path}",
+            tgid = self.tgid,
+            tid = self.tid,
+            size = size_field,
+            dev = dev_display,
+            inode = inode_desc,
+            path = path,
+        );
 
         Ok(())
     }

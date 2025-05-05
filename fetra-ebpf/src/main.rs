@@ -87,7 +87,7 @@ unsafe fn try_handle_write(ctx: &FEntryContext) -> Result<(), i64> {
     let path = (*file).f_path;
 
     let (buf, len) = d_path_local(ctx, path)?;
-    copy_nonoverlapping(buf, &mut event.d_name as *mut _, len.min(256));
+    copy_nonoverlapping(buf, &mut event.path as *mut _, len.min(event.path.len()));
 
     EVENTS.output(&event, 0)?;
 

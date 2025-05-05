@@ -1,14 +1,11 @@
-//! src/path_helpers.rs – eBPF‑side implementation
 use crate::bindings::{dentry, mount, path, qstr, task_struct, vfsmount};
-use aya_ebpf::helpers::bpf_get_current_task_btf;
+use aya_ebpf::helpers::{bpf_get_current_task_btf, bpf_probe_read_kernel_buf};
 use core::mem::offset_of;
 
 use crate::container_of_mut;
 use crate::ext::QstrExt;
-use aya_ebpf::helpers::bpf_probe_read_kernel_str_bytes;
 use aya_ebpf::programs::FEntryContext;
 use aya_ebpf::{helpers::bpf_probe_read_kernel, macros::map, maps::PerCpuArray};
-use aya_log_ebpf::info;
 use core::slice::from_raw_parts_mut;
 
 pub const MAX_BUF_LEN: usize = 4096;
@@ -58,7 +55,7 @@ struct ResolveContext<'a> {
 
 impl ResolveContext<'_> {
     unsafe fn resolve(&mut self) -> Result<(), i64> {
-        for i in 0..32 {
+        for _ in 0..32 {
             if !self.step()? {
                 // info!(self.ctx, "Bailing on step {}", i);
                 break;
@@ -101,7 +98,7 @@ impl ResolveContext<'_> {
     }
 
     unsafe fn prepend_name(&mut self, name: qstr) -> Result<(), i64> {
-        let mut name_len = (name.len() as usize + 1) & MAX_NAME_LEN;
+        let mut name_len = name.len() as usize & MAX_NAME_LEN;
         let mut name_ptr = name.name as *mut u8;
         let mut write_slash = true;
 
@@ -123,8 +120,8 @@ impl ResolveContext<'_> {
             write_ptr = write_ptr.add(1);
         }
 
-        let write_slice = from_raw_parts_mut(write_ptr, name_len as usize);
-        bpf_probe_read_kernel_str_bytes(name_ptr, write_slice).map_err(|err| err as i32)?;
+        let write_slice = from_raw_parts_mut(write_ptr, name_len);
+        bpf_probe_read_kernel_buf(name_ptr, write_slice)?;
 
         Ok(())
     }

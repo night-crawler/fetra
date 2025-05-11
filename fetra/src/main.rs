@@ -1,4 +1,5 @@
 mod process;
+mod ext;
 
 use crate::process::ext::EventExt;
 use anyhow::Context as _;
@@ -8,6 +9,7 @@ use fetra_common::FileAccessEvent;
 use log::{debug, warn};
 use std::fmt::Display;
 use std::fs;
+use crate::ext::EbpfExt;
 
 fn get_ppid(pid: impl Display) -> anyhow::Result<u32> {
     Ok(fs::read_to_string(format!("/proc/{}/stat", pid))?
@@ -17,10 +19,10 @@ fn get_ppid(pid: impl Display) -> anyhow::Result<u32> {
         .parse::<u32>()?)
 }
 
-fn get_ppid_path() -> anyhow::Result<[u32; 8]> {
+fn get_ppid_path() -> anyhow::Result<[u32; 16]> {
     let pid = unsafe { libc::getpid() } as u32;
     let mut parent_pid = unsafe { libc::getppid() } as u32;
-    let mut pids = [0u32; 8];
+    let mut pids = [0u32; 16];
     pids[0] = pid;
     pids[1] = parent_pid;
 
@@ -67,9 +69,13 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let btf = Btf::from_sys_fs().context("BTF from sysfs")?;
-    let program: &mut FEntry = ebpf.program_mut("handle_write").unwrap().try_into()?;
-    program.load("vfs_write", &btf)?;
-    program.attach()?;
+    
+    for syscall in ["vfs_write", "vfs_writev"] {
+        let program_name = format!("handle_{}", syscall);
+        let program = ebpf.load_program::<FEntry>(&program_name)?;
+        program.load(syscall, &btf)?;
+        program.attach()?;
+    }
 
     let mut ring_buf = RingBuf::try_from(ebpf.map_mut("EVENTS").unwrap())?;
     

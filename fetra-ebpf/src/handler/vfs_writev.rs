@@ -4,6 +4,7 @@ use crate::helpers::filter_tgids;
 use crate::EVENTS;
 use aya_ebpf::helpers::{bpf_get_current_comm, bpf_probe_read_user};
 use aya_ebpf::programs::FEntryContext;
+use aya_ebpf::EbpfContext;
 use bytemuck::Zeroable;
 use fetra_common::FileAccessEvent;
 
@@ -25,7 +26,7 @@ pub(crate) unsafe fn try_handle_vfs_writev(ctx: &FEntryContext) -> Result<(), i6
     ev.tgid = tgid;
     ev.comm = bpf_get_current_comm()?;
     ev.bytes = bytes;
-    ev.populate_from_file(file, ctx)?;
+    ev.populate_from_file(file, ctx.as_ptr())?;
 
     EVENTS.output(&ev, 0)?;
 

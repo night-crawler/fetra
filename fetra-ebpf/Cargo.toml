@@ -9,6 +9,7 @@ fetra-common = { path = "../fetra-common" }
 aya-ebpf = { workspace = true }
 aya-log-ebpf = { workspace = true }
 bytemuck.workspace = true
+log = "0.4.27"
 
 [build-dependencies]
 which = { workspace = true }

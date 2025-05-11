@@ -1,10 +1,10 @@
 use crate::bindings::{dentry, mount, path, qstr, task_struct, vfsmount};
 use aya_ebpf::helpers::{bpf_get_current_task_btf, bpf_probe_read_kernel_buf};
+use core::ffi::c_void;
 use core::mem::offset_of;
 
 use crate::container_of_mut;
 use crate::ext::QstrExt;
-use aya_ebpf::programs::FEntryContext;
 use aya_ebpf::{helpers::bpf_probe_read_kernel, macros::map, maps::PerCpuArray};
 use core::slice::from_raw_parts_mut;
 
@@ -37,8 +37,8 @@ unsafe fn is_root(dentry: *const dentry) -> Result<bool, i64> {
     Ok(dentry == parent)
 }
 
-struct ResolveContext<'a> {
-    ctx: &'a FEntryContext,
+struct ResolveContext {
+    ctx: *mut c_void,
 
     root_dentry: *mut dentry,
     root_vfsmnt: *mut vfsmount,
@@ -53,7 +53,7 @@ struct ResolveContext<'a> {
     resolved: bool,
 }
 
-impl ResolveContext<'_> {
+impl ResolveContext {
     unsafe fn resolve(&mut self) -> Result<(), i64> {
         for _ in 0..32 {
             if !self.step()? {
@@ -132,7 +132,7 @@ impl ResolveContext<'_> {
     }
 }
 
-pub unsafe fn d_path_local(ctx: &FEntryContext, path: path) -> Result<(*mut u8, usize), i64> {
+pub unsafe fn d_path_local(ctx: *mut c_void, path: path) -> Result<(*mut u8, usize), i64> {
     let Some(heap) = BUFFER_HEAP_MAP.get_ptr_mut(0) else {
         return Err(-1);
     };
@@ -150,8 +150,6 @@ pub unsafe fn d_path_local(ctx: &FEntryContext, path: path) -> Result<(*mut u8, 
 
     let mount_ptr: *mut mount = container_of_mut!(curr_vfsmnt, mount, mnt);
 
-    // let mnt_id_unique_val = read_mnt_parent(curr_vfsmnt)?;
-
     let mut resolver_context = ResolveContext {
         ctx,
         root_dentry,
@@ -168,7 +166,8 @@ pub unsafe fn d_path_local(ctx: &FEntryContext, path: path) -> Result<(*mut u8, 
 
     resolver_context.resolve()?;
 
-    // info!(ctx, "buf_remainder: {}", resolver_context.buf_remainder);
+    // let ctx = FEntryContext::new(ctx);
+    // info!(&ctx, "buf_remainder: {}", resolver_context.buf_remainder);
 
     let start = base.add(resolver_context.buf_remainder);
     let len = MAX_BUF_LEN - resolver_context.buf_remainder;

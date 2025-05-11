@@ -5,6 +5,7 @@ use crate::ext::EbpfExt;
 use crate::process::ext::EventExt;
 use anyhow::Context as _;
 use aya::maps::RingBuf;
+use aya::programs::FExit;
 use aya::{programs::FEntry, Btf, EbpfLoader};
 use fetra_common::FileAccessEvent;
 use log::{debug, warn};
@@ -76,6 +77,10 @@ async fn main() -> anyhow::Result<()> {
         program.load(syscall, &btf)?;
         program.attach()?;
     }
+
+    let program = ebpf.load_program::<FExit>("handle_filemap_fault")?;
+    program.load("filemap_fault", &btf)?;
+    program.attach()?;
 
     let mut ring_buf = RingBuf::try_from(ebpf.map_mut("EVENTS").unwrap())?;
 

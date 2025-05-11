@@ -27,10 +27,11 @@ mod handler;
 mod helpers;
 mod macros;
 
+use crate::handler::filemap_fault::try_handle_filemap_fault;
 use crate::handler::vfs_write::try_handle_vfs_write;
 use crate::handler::vfs_writev::try_handle_vfs_writev;
-use aya_ebpf::macros::fentry;
-use aya_ebpf::programs::FEntryContext;
+use aya_ebpf::macros::{fentry, fexit};
+use aya_ebpf::programs::{FEntryContext, FExitContext};
 use aya_ebpf::{macros::map, maps::RingBuf};
 use fetra_common::FileAccessEvent;
 
@@ -54,6 +55,14 @@ pub fn handle_vfs_write(ctx: FEntryContext) -> i64 {
 #[fentry(function = "handle_vfs_writev")]
 pub fn handle_vfs_writev(ctx: FEntryContext) -> i64 {
     match unsafe { try_handle_vfs_writev(&ctx) } {
+        Ok(_) => 0,
+        Err(ret) => ret,
+    }
+}
+
+#[fexit(function = "handle_filemap_fault")]
+pub fn handle_filemap_fault(ctx: FExitContext) -> i64 {
+    match unsafe { try_handle_filemap_fault(&ctx) } {
         Ok(_) => 0,
         Err(ret) => ret,
     }

@@ -2,19 +2,18 @@
 
 use bytemuck::{Pod, Zeroable};
 
-#[repr(u32)] 
+#[repr(u32)]
 #[derive(Clone, Copy, Zeroable, Debug)]
 pub enum EventType {
     MmapRead = 0,
     MmapWrite = 1,
     NullPage = 3,
-    
+
     VfsRead = 20,
     VfsWrite = 30,
-    
+
     VfsReadv = 40,
     VfsWritev = 50,
-    
 }
 
 unsafe impl bytemuck::Pod for EventType {}

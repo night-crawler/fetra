@@ -28,6 +28,8 @@ mod helpers;
 mod macros;
 
 use crate::handler::filemap_fault::try_handle_filemap_fault;
+use crate::handler::vfs_read::try_handle_vfs_read;
+use crate::handler::vfs_readv::try_handle_vfs_readv;
 use crate::handler::vfs_write::try_handle_vfs_write;
 use crate::handler::vfs_writev::try_handle_vfs_writev;
 use aya_ebpf::macros::{fentry, fexit};
@@ -65,6 +67,22 @@ pub fn handle_filemap_fault(ctx: FExitContext) -> i64 {
     match unsafe { try_handle_filemap_fault(&ctx) } {
         Ok(_) => 0,
         Err(ret) => ret,
+    }
+}
+
+#[fentry(function = "vfs_read")]
+pub fn handle_vfs_read(ctx: FEntryContext) -> i64 {
+    match unsafe { try_handle_vfs_read(&ctx) } {
+        Ok(_) => 0,
+        Err(e) => e,
+    }
+}
+
+#[fentry(function = "vfs_readv")]
+pub fn handle_vfs_readv(ctx: FEntryContext) -> i64 {
+    match unsafe { try_handle_vfs_readv(&ctx) } {
+        Ok(_) => 0,
+        Err(e) => e,
     }
 }
 

@@ -38,10 +38,7 @@ unsafe fn bytes_from_page(page_ptr: *const page) -> Result<(EventType, u64), i64
     let order = flags & PAGE_ORDER_MASK;
     let num_pages = 1u64 << order;
 
-    Ok((
-        event_type,
-        num_pages * PAGE_SIZE
-    ))
+    Ok((event_type, num_pages * PAGE_SIZE))
 }
 
 pub unsafe fn try_handle_filemap_fault(ctx: &FExitContext) -> Result<(), i64> {

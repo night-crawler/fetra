@@ -71,7 +71,7 @@ async fn main() -> anyhow::Result<()> {
 
     let btf = Btf::from_sys_fs().context("BTF from sysfs")?;
 
-    for syscall in ["vfs_write", "vfs_writev"] {
+    for syscall in ["vfs_write", "vfs_writev", "vfs_read", "vfs_readv"] {
         let program_name = format!("handle_{}", syscall);
         let program = ebpf.load_program::<FEntry>(&program_name)?;
         program.load(syscall, &btf)?;

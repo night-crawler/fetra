@@ -104,10 +104,7 @@ fn mode_to_string(mode: u16) -> String {
 }
 
 /// Human‑friendly (IEC) byte sizes, used for regular files.
-fn human_size(bytes: i64) -> String {
-    if bytes < 0 {
-        return "-".to_string();
-    }
+fn human_size(bytes: u64) -> String {
     const UNITS: [&str; 7] = ["B", "K", "M", "G", "T", "P", "E"];
     let mut val = bytes as f64;
     let mut idx = 0usize;
@@ -166,7 +163,8 @@ impl EventExt for FileAccessEvent {
         };
 
         println!(
-            "{perms} {tgid:<10}:{tid:<10} {comm:<16} {size:<8} {dev:<10} {inode:<18} {path}",
+            "{typ:<10?} {perms} {tgid:<10}:{tid:<10} {comm:<16} {size:<8} {dev:<10} {inode:<18} {path}",
+            typ=self.event_type,
             tgid = self.tgid,
             tid = self.tid,
             size = size_field,

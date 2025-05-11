@@ -2,22 +2,33 @@
 
 use bytemuck::{Pod, Zeroable};
 
-#[repr(C)]
+#[repr(u32)] 
 #[derive(Clone, Copy, Zeroable, Debug)]
 pub enum EventType {
-    FileMapFaultRead,
+    MmapRead = 0,
+    MmapWrite = 1,
+    NullPage = 3,
+    
+    VfsRead = 20,
+    VfsWrite = 30,
+    
+    VfsReadv = 40,
+    VfsWritev = 50,
+    
 }
+
+unsafe impl bytemuck::Pod for EventType {}
 
 #[repr(C)]
 #[derive(Clone, Copy, Zeroable, Pod, Debug)]
 pub struct FileAccessEvent {
     pub inode: u64,
-    pub bytes: i64,
+    pub bytes: u64,
 
     pub tid: u32,
     pub tgid: u32,
     pub dev: u32,
-    _pad0: [u8; 4],
+    pub event_type: EventType,
 
     pub comm: [u8; 16],
 

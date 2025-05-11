@@ -1,6 +1,7 @@
-mod process;
 mod ext;
+mod process;
 
+use crate::ext::EbpfExt;
 use crate::process::ext::EventExt;
 use anyhow::Context as _;
 use aya::maps::RingBuf;
@@ -9,7 +10,6 @@ use fetra_common::FileAccessEvent;
 use log::{debug, warn};
 use std::fmt::Display;
 use std::fs;
-use crate::ext::EbpfExt;
 
 fn get_ppid(pid: impl Display) -> anyhow::Result<u32> {
     Ok(fs::read_to_string(format!("/proc/{}/stat", pid))?
@@ -69,7 +69,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let btf = Btf::from_sys_fs().context("BTF from sysfs")?;
-    
+
     for syscall in ["vfs_write", "vfs_writev"] {
         let program_name = format!("handle_{}", syscall);
         let program = ebpf.load_program::<FEntry>(&program_name)?;
@@ -78,7 +78,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let mut ring_buf = RingBuf::try_from(ebpf.map_mut("EVENTS").unwrap())?;
-    
+
     loop {
         while let Some(item) = ring_buf.next() {
             let event = bytemuck::from_bytes::<FileAccessEvent>(&item);

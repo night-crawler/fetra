@@ -1,18 +1,15 @@
-// #[macro_export]
-// macro_rules! r {
-//     ($base:expr, $($field:tt).+) => {{
-//         #[allow(unused_unsafe)]
-//         unsafe { (*$base)$(.$field)+ }
-//     }};
-// }
+use crate::FILTER_TGIDS;
+use aya_ebpf::helpers::bpf_get_current_pid_tgid;
 
-#[macro_export]
-macro_rules! container_of_mut {
-    ($ptr:expr, $type:ty, $member:ident) => {{
-        let offset = offset_of!($type, $member);
-        let member_ptr = $ptr as *mut _ as *mut u8;
-        let base_ptr = unsafe { member_ptr.offset(-(offset as isize)) };
-        base_ptr as *mut $type
-    }};
+pub(crate) unsafe fn filter_tgids() -> Option<(u32, u32)> {
+    let pid_tgid = bpf_get_current_pid_tgid();
+
+    let tgid = (pid_tgid >> 32) as u32;
+    let tid = (pid_tgid & 0xffff_ffff) as u32;
+
+    if FILTER_TGIDS.contains(&tgid) {
+        return None;
+    }
+
+    Some((tgid, tid))
 }
-

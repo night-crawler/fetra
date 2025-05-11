@@ -3,6 +3,12 @@
 use bytemuck::{Pod, Zeroable};
 
 #[repr(C)]
+#[derive(Clone, Copy, Zeroable, Debug)]
+pub enum EventType {
+    FileMapFaultRead,
+}
+
+#[repr(C)]
 #[derive(Clone, Copy, Zeroable, Pod, Debug)]
 pub struct FileAccessEvent {
     pub inode: u64,

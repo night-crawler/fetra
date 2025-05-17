@@ -1,16 +1,21 @@
 mod ext;
 mod process;
+mod types;
 
 use crate::ext::EbpfExt;
-use crate::process::ext::EventExt;
+use crate::process::aggregator::Aggregator;
 use anyhow::Context as _;
 use aya::maps::RingBuf;
 use aya::programs::FExit;
 use aya::{programs::FEntry, Btf, EbpfLoader};
 use fetra_common::FileAccessEvent;
-use log::{debug, warn};
+use log::{debug, info, warn};
+use metrics_exporter_prometheus::PrometheusBuilder;
+use metrics_util::MetricKindMask;
 use std::fmt::Display;
 use std::fs;
+use std::time::Duration;
+use tokio::io::unix::AsyncFd;
 
 fn get_ppid(pid: impl Display) -> anyhow::Result<u32> {
     Ok(fs::read_to_string(format!("/proc/{}/stat", pid))?
@@ -40,10 +45,10 @@ fn get_ppid_path() -> anyhow::Result<[u32; 16]> {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    env_logger::init();
+    setup_metrics()?;
 
     let ppid_path = get_ppid_path()?;
-    println!("{:?}", ppid_path);
+    info!("Ignoring self pids: {:?}", ppid_path);
 
     let rlim = libc::rlimit {
         rlim_cur: libc::RLIM_INFINITY,
@@ -51,7 +56,7 @@ async fn main() -> anyhow::Result<()> {
     };
     let ret = unsafe { libc::setrlimit(libc::RLIMIT_MEMLOCK, &rlim) };
     if ret != 0 {
-        debug!("remove limit on locked memory failed, ret is: {ret}");
+        debug!("remove the limit on locked memory failed, ret is: {ret}");
     }
 
     let mut loader = EbpfLoader::new();
@@ -82,17 +87,35 @@ async fn main() -> anyhow::Result<()> {
     program.load("filemap_fault", &btf)?;
     program.attach()?;
 
-    let mut ring_buf = RingBuf::try_from(ebpf.map_mut("EVENTS").unwrap())?;
+    let ring_buf = RingBuf::try_from(ebpf.map_mut("EVENTS").unwrap())?;
+    let mut async_ring = AsyncFd::new(ring_buf)?;
+    let aggregator = Aggregator::new();
 
     loop {
+        let mut guard = async_ring.readable_mut().await?;
+        let ring_buf = guard.get_inner_mut();
         while let Some(item) = ring_buf.next() {
             let event = bytemuck::from_bytes::<FileAccessEvent>(&item);
-            match event.process() {
-                Ok(_) => {}
-                Err(err) => {
-                    warn!("Failed to read event: {err}");
-                }
-            }
+            aggregator.process_event(event).await?;
         }
+
+        guard.clear_ready();
     }
+}
+
+fn setup_metrics() -> anyhow::Result<()> {
+    tracing_subscriber::fmt::init();
+    let builder = PrometheusBuilder::new();
+    builder
+        .idle_timeout(
+            MetricKindMask::COUNTER | MetricKindMask::HISTOGRAM,
+            Some(Duration::from_secs(10)),
+        )
+        .install()
+        .context("failed to install Prometheus recorder")?;
+    
+    metrics::describe_counter!("io_per_file", "I/O per file");
+    
+
+    Ok(())
 }

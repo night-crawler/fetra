@@ -12,19 +12,21 @@ fetra-common = { path = "../fetra-common", features = ["user"] }
 anyhow = { workspace = true, default-features = true }
 aya = { workspace = true }
 aya-log = { workspace = true }
-env_logger = { workspace = true }
 libc = { workspace = true }
 log = { workspace = true }
-tokio = { workspace = true, features = [
-    "macros",
-    "rt",
-    "rt-multi-thread",
-    "net",
-    "signal",
-] }
+tokio = { workspace = true, features = ["full"] }
 thiserror.workspace = true
 nix.workspace = true
-linux-raw-sys = "0.9.4"
+linux-raw-sys.workspace = true
+moka = { workspace = true, features = ["future"] }
+bitflags.workspace = true
+num_enum.workspace = true
+strum.workspace = true
+strum_macros.workspace = true
+tracing-subscriber.workspace = true
+metrics-exporter-prometheus.workspace = true
+metrics-util.workspace = true
+metrics.workspace = true
 
 [build-dependencies]
 anyhow = { workspace = true }

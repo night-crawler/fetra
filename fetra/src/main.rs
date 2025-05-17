@@ -14,6 +14,7 @@ use metrics_exporter_prometheus::PrometheusBuilder;
 use metrics_util::MetricKindMask;
 use std::fmt::Display;
 use std::fs;
+use std::net::SocketAddr;
 use std::time::Duration;
 use tokio::io::unix::AsyncFd;
 
@@ -107,15 +108,12 @@ fn setup_metrics() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
     let builder = PrometheusBuilder::new();
     builder
-        .idle_timeout(
-            MetricKindMask::COUNTER | MetricKindMask::HISTOGRAM,
-            Some(Duration::from_secs(10)),
-        )
+        .with_http_listener(SocketAddr::from(([0, 0, 0, 0], 8819)))
+        .idle_timeout(MetricKindMask::COUNTER, Some(Duration::from_secs(10)))
         .install()
         .context("failed to install Prometheus recorder")?;
-    
-    metrics::describe_counter!("io_per_file", "I/O per file");
-    
+
+    metrics::describe_counter!("io", "I/O");
 
     Ok(())
 }

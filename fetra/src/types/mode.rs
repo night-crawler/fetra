@@ -13,8 +13,6 @@ pub enum FileType {
     RegularFile = S_IFREG,
     Symlink = S_IFLNK,
     Socket = S_IFSOCK,
-
-    Unknown = 0,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]

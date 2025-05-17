@@ -2,7 +2,7 @@ use crate::types;
 use crate::types::fs_type::FsType;
 use crate::types::mode::{FileType, Permissions};
 use crate::types::Result;
-use fetra_common::FileAccessEvent;
+use fetra_common::{EventType, FileAccessEvent};
 use linux_raw_sys::general::S_IFMT;
 use std::borrow::Cow;
 use std::ffi::{c_char, CStr};
@@ -14,18 +14,22 @@ pub trait EventExt {
 
     fn major(&self) -> u32;
     fn minor(&self) -> u32;
+    fn file_type_mode(&self) -> u32;
 
     fn file_type(&self) -> Result<FileType>;
     fn perms(&self) -> Permissions;
     fn fs_type(&self) -> Result<FsType>;
     async fn dev_name(&self) -> Result<String>;
+    fn type_name(&self) -> &'static str;
+    fn direction(&self) -> &'static str;
+    fn syscall(&self) -> &'static str;
 }
 
 impl EventExt for FileAccessEvent {
     fn comm(&self) -> Cow<str> {
         unsafe { CStr::from_ptr(self.comm.as_ptr() as *const c_char) }.to_string_lossy()
     }
-    
+
     fn path(&self) -> Cow<str> {
         unsafe { CStr::from_ptr(self.path.as_ptr() as *const c_char) }.to_string_lossy()
     }
@@ -44,8 +48,12 @@ impl EventExt for FileAccessEvent {
         self.dev & 0xfffff
     }
 
+    fn file_type_mode(&self) -> u32 {
+        (self.i_mode as u32) & S_IFMT
+    }
+
     fn file_type(&self) -> Result<FileType> {
-        Ok(FileType::try_from((self.i_mode as u32) & S_IFMT)?)
+        Ok(FileType::try_from(self.file_type_mode())?)
     }
 
     fn perms(&self) -> Permissions {
@@ -73,6 +81,42 @@ impl EventExt for FileAccessEvent {
             }
         }
         Err(types::Error::DeviceNotFound(self.major(), self.minor()))
+    }
+
+    fn type_name(&self) -> &'static str {
+        match self.event_type {
+            EventType::MmapRead => "mmap",
+            EventType::MmapWrite => "mmap",
+            EventType::NullPage => "mmap_null_page",
+            EventType::VfsRead => "vfs",
+            EventType::VfsWrite => "vfs",
+            EventType::VfsReadv => "vfs",
+            EventType::VfsWritev => "vfs",
+        }
+    }
+
+    fn direction(&self) -> &'static str {
+        match self.event_type {
+            EventType::MmapRead => "read",
+            EventType::MmapWrite => "write",
+            EventType::NullPage => "unknown",
+            EventType::VfsRead => "read",
+            EventType::VfsWrite => "write",
+            EventType::VfsReadv => "read",
+            EventType::VfsWritev => "write",
+        }
+    }
+
+    fn syscall(&self) -> &'static str {
+        match self.event_type {
+            EventType::MmapRead => "mmap",
+            EventType::MmapWrite => "mmap",
+            EventType::NullPage => "unknown",
+            EventType::VfsRead => "vfs_read",
+            EventType::VfsWrite => "vfs_write",
+            EventType::VfsReadv => "vfs_readv",
+            EventType::VfsWritev => "vfs_writev",
+        }
     }
 }
 

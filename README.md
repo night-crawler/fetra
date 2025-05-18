@@ -7,12 +7,14 @@ rustup component add rust-src --toolchain nightly-x86_64-unknown-linux-gnu
 yay -S bpf-linker
 ```
 
-## Update bindings if needed
+## Update bindings if needed (the current bindings are for `6.14.6-arch1-1`)
+
+TODO: get rid of embedded bindings
 
 ```bash
-aya-tool generate pageflags > fetra-ebpf/src/pageflags.rs  
+aya-tool generate pageflags > fetra-ebpf/src/pageflags.rs
+aya-tool generate super_block vm_fault > ./fetra-ebpf/src/bindings/common.rs
 ```
-
 
 ## Prerequisites
 

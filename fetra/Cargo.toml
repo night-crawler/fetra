@@ -27,6 +27,8 @@ tracing-subscriber.workspace = true
 metrics-exporter-prometheus.workspace = true
 metrics-util.workspace = true
 metrics.workspace = true
+if-addrs.workspace = true
+hostname.workspace = true
 
 [build-dependencies]
 anyhow = { workspace = true }

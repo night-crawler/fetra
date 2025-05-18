@@ -5,17 +5,20 @@ use metrics::Label;
 use moka::future::Cache;
 use std::sync::Arc;
 use std::time::Duration;
+use crate::init::MachineInfo;
 
 pub struct Aggregator {
     cmd_name_by_tgid: Cache<u32, Arc<str>>,
     device_name_by_dev: Cache<u32, Arc<str>>,
     fs_type_by_magic: Cache<u64, Arc<str>>,
     file_type_by_mode: Cache<u32, Arc<str>>,
+    machine_info: MachineInfo
 }
 
 impl Aggregator {
-    pub fn new() -> Self {
+    pub fn new(machine_info: MachineInfo) -> Self {
         Self {
+            machine_info,
             cmd_name_by_tgid: Cache::builder()
                 .max_capacity(10000)
                 .time_to_idle(Duration::from_secs(5))
@@ -66,6 +69,10 @@ impl Aggregator {
             Label::new("syscall", event.syscall()),
             Label::new("direction", event.direction()),
             Label::new("type_name", event.type_name()),
+            // todo: to_owned :(
+            Label::new("ips", self.machine_info.string_ips.as_ref().to_owned()),
+            Label::new("hostname", self.machine_info.hostname.to_owned()),
+            Label::new("machine_id", self.machine_info.id.to_owned()),
         ]
         .into()
     }

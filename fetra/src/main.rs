@@ -1,21 +1,19 @@
-mod ext;
+mod ebpf_ext;
+mod init;
 mod process;
 mod types;
 
-use crate::ext::EbpfExt;
+use crate::ebpf_ext::EbpfExt;
+use crate::init::{set_rlimit, setup_metrics, MachineInfo};
 use crate::process::aggregator::Aggregator;
 use anyhow::Context as _;
 use aya::maps::RingBuf;
 use aya::programs::FExit;
 use aya::{programs::FEntry, Btf, EbpfLoader};
 use fetra_common::FileAccessEvent;
-use log::{debug, info, warn};
-use metrics_exporter_prometheus::PrometheusBuilder;
-use metrics_util::MetricKindMask;
+use log::{info, warn};
 use std::fmt::Display;
 use std::fs;
-use std::net::SocketAddr;
-use std::time::Duration;
 use tokio::io::unix::AsyncFd;
 
 fn get_ppid(pid: impl Display) -> anyhow::Result<u32> {
@@ -35,7 +33,7 @@ fn get_ppid_path() -> anyhow::Result<[u32; 16]> {
 
     for pid in pids.iter_mut().skip(2) {
         parent_pid = get_ppid(parent_pid)?;
-        if parent_pid == 0 {
+        if parent_pid == 0 || parent_pid == 1 {
             break;
         }
         *pid = parent_pid;
@@ -50,19 +48,14 @@ async fn main() -> anyhow::Result<()> {
 
     let ppid_path = get_ppid_path()?;
     info!("Ignoring self pids: {:?}", ppid_path);
-    
+
     let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) } as u64;
     info!("Using page size: {}", page_size);
 
-    let rlim = libc::rlimit {
-        rlim_cur: libc::RLIM_INFINITY,
-        rlim_max: libc::RLIM_INFINITY,
-    };
-    let ret = unsafe { libc::setrlimit(libc::RLIMIT_MEMLOCK, &rlim) };
-    if ret != 0 {
-        debug!("remove the limit on locked memory failed, ret is: {ret}");
-    }
+    let machine_info = MachineInfo::new().await;
+    info!("{:?}", machine_info);
 
+    set_rlimit();
 
     let mut loader = EbpfLoader::new();
     let btf = Btf::from_sys_fs().ok();
@@ -95,7 +88,7 @@ async fn main() -> anyhow::Result<()> {
 
     let ring_buf = RingBuf::try_from(ebpf.map_mut("EVENTS").unwrap())?;
     let mut async_ring = AsyncFd::new(ring_buf)?;
-    let aggregator = Aggregator::new();
+    let aggregator = Aggregator::new(machine_info);
 
     loop {
         let mut guard = async_ring.readable_mut().await?;
@@ -107,18 +100,4 @@ async fn main() -> anyhow::Result<()> {
 
         guard.clear_ready();
     }
-}
-
-fn setup_metrics() -> anyhow::Result<()> {
-    tracing_subscriber::fmt::init();
-    let builder = PrometheusBuilder::new();
-    builder
-        .with_http_listener(SocketAddr::from(([0, 0, 0, 0], 8819)))
-        .idle_timeout(MetricKindMask::COUNTER, Some(Duration::from_secs(10)))
-        .install()
-        .context("failed to install Prometheus recorder")?;
-
-    metrics::describe_counter!("io", "I/O");
-
-    Ok(())
 }

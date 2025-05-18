@@ -10,14 +10,7 @@
 #![no_std]
 #![no_main]
 
-#[allow(
-    non_upper_case_globals,
-    non_camel_case_types,
-    non_snake_case,
-    dead_code,
-    improper_ctypes,
-    clippy::all
-)]
+
 pub mod bindings;
 
 mod d_path;

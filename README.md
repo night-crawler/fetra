@@ -1,5 +1,12 @@
 # fetra
 
+## 
+
+```bash
+rustup component add rust-src --toolchain nightly-x86_64-unknown-linux-gnu
+yay -S bpf-linker
+```
+
 ## Update bindings if needed
 
 ```bash

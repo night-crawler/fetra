@@ -1,7 +1,9 @@
 # fetra
 
+## Update bindings if needed
+
 ```bash
-sudo bpftool btf dump file /sys/kernel/btf/vmlinux format c > fetra-bindings/vmlinux.h
+aya-tool generate pageflags > fetra-ebpf/src/pageflags.rs  
 ```
 
 

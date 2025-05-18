@@ -40,6 +40,9 @@ use fetra_common::FileAccessEvent;
 #[no_mangle]
 static mut FILTER_TGIDS: [u32; 16] = [0; 16];
 
+#[no_mangle]
+static mut PAGE_SIZE: u64 = 4096;
+
 const N_EVENTS: usize = 16 * 1024;
 const RB_CAP: u32 = (N_EVENTS * size_of::<FileAccessEvent>()) as u32;
 

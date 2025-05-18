@@ -17,7 +17,7 @@ impl EbpfExt for Ebpf {
         <&'a mut T as TryFrom<&'a mut programs::Program>>::Error: Debug,
     {
         let program = self
-            .program_mut(&name)
+            .program_mut(name)
             .with_context(|| format!("Failed to attach program '{name}'"))?;
 
         let program: &mut T = program.try_into().map_err(

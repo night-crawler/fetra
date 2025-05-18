@@ -50,6 +50,9 @@ async fn main() -> anyhow::Result<()> {
 
     let ppid_path = get_ppid_path()?;
     info!("Ignoring self pids: {:?}", ppid_path);
+    
+    let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) } as u64;
+    info!("Using page size: {}", page_size);
 
     let rlim = libc::rlimit {
         rlim_cur: libc::RLIM_INFINITY,
@@ -60,11 +63,13 @@ async fn main() -> anyhow::Result<()> {
         debug!("remove the limit on locked memory failed, ret is: {ret}");
     }
 
+
     let mut loader = EbpfLoader::new();
     let btf = Btf::from_sys_fs().ok();
     loader
         .btf(btf.as_ref())
-        .set_global("FILTER_TGIDS", &ppid_path, true);
+        .set_global("FILTER_TGIDS", &ppid_path, true)
+        .set_global("PAGE_SIZE", &page_size, true);
 
     let mut ebpf = loader.load(aya::include_bytes_aligned!(concat!(
         env!("OUT_DIR"),

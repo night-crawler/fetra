@@ -10,7 +10,6 @@
 #![no_std]
 #![no_main]
 
-
 pub mod bindings;
 
 mod d_path;

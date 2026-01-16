@@ -87,7 +87,7 @@ impl ResolveContext {
             return Ok(false);
         }
 
-        let name = bpf_probe_read_kernel(&(*self.curr_dentry).d_name)?;
+        let name = bpf_probe_read_kernel(&(*self.curr_dentry).__bindgen_anon_1.d_name)?;
         self.prepend_name(name)?;
 
         // info!(self.ctx, "name_len: {}", name.len());

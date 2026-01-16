@@ -8,8 +8,8 @@ use std::borrow::Cow;
 use std::ffi::{c_char, CStr};
 
 pub trait EventExt {
-    fn comm(&self) -> Cow<str>;
-    fn path(&self) -> Cow<str>;
+    fn comm(&self) -> Cow<'_, str>;
+    fn path(&self) -> Cow<'_, str>;
     async fn cmdline(&self) -> Result<Cmdline>;
 
     fn major(&self) -> u32;
@@ -26,11 +26,11 @@ pub trait EventExt {
 }
 
 impl EventExt for FileAccessEvent {
-    fn comm(&self) -> Cow<str> {
+    fn comm(&self) -> Cow<'_, str> {
         unsafe { CStr::from_ptr(self.comm.as_ptr() as *const c_char) }.to_string_lossy()
     }
 
-    fn path(&self) -> Cow<str> {
+    fn path(&self) -> Cow<'_, str> {
         unsafe { CStr::from_ptr(self.path.as_ptr() as *const c_char) }.to_string_lossy()
     }
 
@@ -138,7 +138,7 @@ impl Cmdline {
         }
     }
 
-    pub fn name(&self) -> Cow<str> {
+    pub fn name(&self) -> Cow<'_, str> {
         let name = String::from_utf8_lossy(&self.data[..self.name_end_index]);
         name
     }

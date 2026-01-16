@@ -1,3 +1,4 @@
+use crate::init::MachineInfo;
 use crate::process::event_ext::EventExt;
 use crate::types;
 use fetra_common::FileAccessEvent;
@@ -5,14 +6,13 @@ use metrics::Label;
 use moka::future::Cache;
 use std::sync::Arc;
 use std::time::Duration;
-use crate::init::MachineInfo;
 
 pub struct Aggregator {
     cmd_name_by_tgid: Cache<u32, Arc<str>>,
     device_name_by_dev: Cache<u32, Arc<str>>,
     fs_type_by_magic: Cache<u64, Arc<str>>,
     file_type_by_mode: Cache<u32, Arc<str>>,
-    machine_info: MachineInfo
+    machine_info: MachineInfo,
 }
 
 impl Aggregator {

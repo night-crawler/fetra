@@ -24,7 +24,7 @@ impl EventExt for FileAccessEvent {
         self.s_magic = (*sb_ptr).s_magic;
         self.i_mode = (*inode_ptr).i_mode;
 
-        let path = (*file).f_path;
+        let path = (*file).__bindgen_anon_1.f_path;
 
         let (buf, len) = d_path_local(ctx, path)?;
         copy_nonoverlapping(buf, &mut self.path as *mut _, len.min(self.path.len()));

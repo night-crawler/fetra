@@ -38,7 +38,7 @@ unsafe fn bytes_from_page(vmf: *const vm_fault) -> Result<(EventType, u64), i64>
 
     let mut num_pages = 1u64;
 
-    let pgflags: u64 = bpf_probe_read_kernel(&(*page_ptr).flags)?;
+    let pgflags: u64 = bpf_probe_read_kernel(&(*page_ptr).flags)?.f as u64;
     if pgflags & PG_HEAD_MASK != 0 {
         let order_ptr = page_ptr.add(1) as *const u8;
         let order: u8 = bpf_probe_read_kernel(order_ptr)?;
@@ -78,7 +78,7 @@ pub unsafe fn try_handle_filemap_fault(ctx: &FExitContext) -> Result<(), i64> {
     event.s_magic = bpf_probe_read_kernel(&(*sb_ptr).s_magic)?;
     event.i_mode = bpf_probe_read_kernel(&(*inode_ptr).i_mode)?;
 
-    let path = bpf_probe_read_kernel(&(*f).f_path)?;
+    let path = bpf_probe_read_kernel(&(*f).__bindgen_anon_1.f_path)?;
 
     let (buf, len) = d_path_local(ctx.as_ptr(), path)?;
     copy_nonoverlapping(buf, &mut event.path as *mut _, len.min(event.path.len()));
